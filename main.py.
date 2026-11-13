@@ -1,0 +1,53 @@
+
+import os
+import httpx
+from fastapi import FastAPI, Request
+
+app = FastAPI()
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+
+    message = data.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    user_text = message.get("text", "")
+
+    if not chat_id or not user_text:
+        return {"ok": True}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}"
+            },
+            json={
+                "model": "openai/gpt-oss-20b",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Ты NEUROX AI. Отвечай на русском языке, дружелюбно и понятно."
+                    },
+                    {
+                        "role": "user",
+                        "content": user_text
+                    }
+                ]
+            }
+        )
+
+        answer = response.json()["choices"][0]["message"]["content"]
+
+        await client.post(
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": answer
+            }
+        )
+
+    return {"ok": True}
